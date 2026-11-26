@@ -11,7 +11,7 @@ iOS 文件管理器与压缩包解压工具。SwiftUI 实现，通过 GitHub Act
 | 格式 | 扩展名 | 读取 | 解压 | 加密 | 引擎 |
 |---|---|---|---|---|---|
 | ZIP | zip, cbz | ✅ | ✅ | ✅ ZipCrypto / AES | libarchive |
-| RAR / RAR5 | rar, cbr | ✅ | ✅ | ✅ | libarchive |
+| RAR / RAR5 | rar, cbr | ✅ | ✅ | ⚠️ 密码已透传，未实测 | libarchive |
 | 7-Zip | 7z | ✅ | ✅ | ❌ | SWCompression |
 | TAR | tar | ✅ | ✅ | — | SWCompression |
 | GZip | gz, tgz | ✅ | ✅（内层 tar 自动展开） | — | SWCompression |
@@ -21,6 +21,8 @@ iOS 文件管理器与压缩包解压工具。SwiftUI 实现，通过 GitHub Act
 | CAB | cab | ✅ | ✅ | — | libarchive |
 
 格式识别读文件头魔数，不看扩展名——改了后缀的包也能正确识别。
+
+> 加密 ZIP / RAR 的密码会交给 libarchive，引擎本身支持；但仓库里没有可公开分发的加密样本，CI 未做实测。
 
 不支持：DMG、ARJ、LZH/LHA、ACE、Z（compress）、分卷压缩包、加密 7z。遇到这些会明确报「无法识别这个压缩包的格式」，不会静默失败。
 
