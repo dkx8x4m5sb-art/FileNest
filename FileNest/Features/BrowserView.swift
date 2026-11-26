@@ -58,19 +58,22 @@ struct BrowserView: View {
                 importButton
             }
             .padding(.bottom, 10)
-        }
-        .toolbar(.hidden, for: .navigationBar)
-        .fileImporter(
-            isPresented: $isImporting,
-            allowedContentTypes: [.item],
-            allowsMultipleSelection: true
-        ) { result in
-            switch result {
-            case .success(let urls):
-                store.importFiles(urls)
-            case .failure(let error):
-                store.errorMessage = error.localizedDescription
+
+            if store.isImportingFiles {
+                importingOverlay
             }
+        }
+        .animation(.easeInOut(duration: 0.2), value: store.isImportingFiles)
+        .toolbar(.hidden, for: .navigationBar)
+        .sheet(isPresented: $isImporting) {
+            DocumentPicker(
+                onPick: { urls in
+                    isImporting = false
+                    store.importFiles(urls)
+                },
+                onCancel: { isImporting = false }
+            )
+            .ignoresSafeArea()
         }
         .confirmationDialog(
             "删除「\(pendingDelete?.name ?? "")」？",
@@ -94,7 +97,7 @@ struct BrowserView: View {
         }
         .task(id: store.errorMessage) {
             guard store.errorMessage != nil else { return }
-            try? await Task.sleep(nanoseconds: 2_800_000_000)
+            try? await Task.sleep(nanoseconds: 5_500_000_000)
             withAnimation(.easeOut(duration: 0.2)) { store.errorMessage = nil }
         }
     }
@@ -330,6 +333,22 @@ struct BrowserView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("导入文件")
+    }
+
+    private var importingOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.28).ignoresSafeArea()
+
+            VStack(spacing: 12) {
+                ProgressView()
+                    .tint(.primary)
+                Text("正在导入")
+                    .font(.system(size: 14, weight: .medium))
+            }
+            .padding(.horizontal, 30)
+            .padding(.vertical, 22)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        }
     }
 
     private func toast(_ text: String) -> some View {

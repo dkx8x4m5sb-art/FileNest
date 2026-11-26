@@ -21,6 +21,7 @@ final class FileStore: ObservableObject {
     @Published var sortField: SortField = .name
     @Published var ascending: Bool = true
     @Published var errorMessage: String?
+    @Published var isImportingFiles: Bool = false
 
     let folder: URL
 
@@ -126,20 +127,45 @@ final class FileStore: ObservableObject {
     }
 
     func importFiles(_ urls: [URL]) {
-        for url in urls {
-            let scoped = url.startAccessingSecurityScopedResource()
-            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-            let target = uniqueDestination(for: url.lastPathComponent)
-            do {
-                try FileManager.default.copyItem(at: url, to: target)
-            } catch {
-                errorMessage = error.localizedDescription
+        guard !urls.isEmpty else { return }
+        isImportingFiles = true
+        errorMessage = nil
+
+        let folder = self.folder
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let fm = FileManager.default
+            var failures: [String] = []
+            var succeeded = 0
+
+            for url in urls {
+                let scoped = url.startAccessingSecurityScopedResource()
+                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+
+                let target = Self.uniqueDestination(for: url.lastPathComponent, in: folder)
+                do {
+                    try fm.copyItem(at: url, to: target)
+                    succeeded += 1
+                } catch {
+                    failures.append("\(url.lastPathComponent)：\(error.localizedDescription)")
+                }
+            }
+
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                self.isImportingFiles = false
+                self.reload()
+                if !failures.isEmpty {
+                    let head = failures.prefix(2).joined(separator: "\n")
+                    self.errorMessage = failures.count == urls.count
+                        ? "导入失败\n\(head)"
+                        : "\(succeeded) 个成功，\(failures.count) 个失败\n\(head)"
+                }
             }
         }
-        reload()
     }
 
-    func uniqueDestination(for name: String) -> URL {
+    /// 避免同名覆盖：`名称 2.zip`、`名称 3.zip` …
+    static func uniqueDestination(for name: String, in folder: URL) -> URL {
         let base = (name as NSString).deletingPathExtension
         let ext = (name as NSString).pathExtension
         var candidate = folder.appendingPathComponent(name)
@@ -150,5 +176,9 @@ final class FileStore: ObservableObject {
             index += 1
         }
         return candidate
+    }
+
+    func uniqueDestination(for name: String) -> URL {
+        Self.uniqueDestination(for: name, in: folder)
     }
 }
