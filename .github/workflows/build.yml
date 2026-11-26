@@ -24,47 +24,44 @@ jobs:
           xcodebuild -version
           xcrun --sdk iphoneos --show-sdk-version
 
-      - name: Build libarchive for iOS arm64
-        timeout-minutes: 15
+      - name: Build libarchive for iOS (device + simulator)
+        timeout-minutes: 20
         run: |
           set -euo pipefail
-          SDK=$(xcrun --sdk iphoneos --show-sdk-path)
           git clone --depth 1 https://github.com/libarchive/libarchive.git /tmp/la
 
-          cmake -B /tmp/la-build -S /tmp/la -G Ninja \
-            -DCMAKE_SYSTEM_NAME=iOS \
-            -DCMAKE_OSX_ARCHITECTURES=arm64 \
-            -DCMAKE_OSX_DEPLOYMENT_TARGET=16.0 \
-            -DCMAKE_OSX_SYSROOT="$SDK" \
-            -DCMAKE_FIND_ROOT_PATH="$SDK" \
-            -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY \
-            -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DENABLE_SHARED=OFF \
-            -DENABLE_STATIC=ON \
-            -DENABLE_TEST=OFF \
-            -DENABLE_TAR=OFF \
-            -DENABLE_CPIO=OFF \
-            -DENABLE_CAT=OFF \
-            -DENABLE_UNZIP=OFF \
-            -DENABLE_ACL=OFF \
-            -DENABLE_XATTR=OFF \
-            -DENABLE_OPENSSL=OFF \
-            -DENABLE_LIBXML2=OFF \
-            -DENABLE_EXPAT=OFF \
-            -DENABLE_ZLIB=ON \
-            -DENABLE_BZip2=OFF \
-            -DENABLE_LZMA=OFF \
-            -DENABLE_ZSTD=OFF \
-            -DENABLE_LZ4=OFF
+          build_slice () {
+            local sdk="$1"
+            local outdir="$2"
+            local sysroot
+            sysroot=$(xcrun --sdk "$sdk" --show-sdk-path)
+            cmake -B "/tmp/la-build-$sdk" -S /tmp/la -G Ninja \
+              -DCMAKE_SYSTEM_NAME=iOS \
+              -DCMAKE_OSX_ARCHITECTURES=arm64 \
+              -DCMAKE_OSX_DEPLOYMENT_TARGET=17.0 \
+              -DCMAKE_OSX_SYSROOT="$sysroot" \
+              -DCMAKE_FIND_ROOT_PATH="$sysroot" \
+              -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY \
+              -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DENABLE_SHARED=OFF -DENABLE_STATIC=ON -DENABLE_TEST=OFF \
+              -DENABLE_TAR=OFF -DENABLE_CPIO=OFF -DENABLE_CAT=OFF -DENABLE_UNZIP=OFF \
+              -DENABLE_ACL=OFF -DENABLE_XATTR=OFF \
+              -DENABLE_OPENSSL=OFF -DENABLE_LIBXML2=OFF -DENABLE_EXPAT=OFF \
+              -DENABLE_ZLIB=ON -DENABLE_BZip2=OFF -DENABLE_LZMA=OFF \
+              -DENABLE_ZSTD=OFF -DENABLE_LZ4=OFF
+            cmake --build "/tmp/la-build-$sdk" --target archive_static
+            mkdir -p "$outdir"
+            cp "/tmp/la-build-$sdk/libarchive/libarchive.a" "$outdir/"
+            lipo -info "$outdir/libarchive.a"
+          }
 
-          cmake --build /tmp/la-build --target archive_static
+          build_slice iphoneos vendor/lib
+          build_slice iphonesimulator vendor/lib-sim
 
-          mkdir -p vendor/lib vendor/include
-          cp /tmp/la-build/libarchive/libarchive.a vendor/lib/
+          mkdir -p vendor/include
           cp /tmp/la/libarchive/*.h vendor/include/ 2>/dev/null || true
-          cp /tmp/la-build/config.h vendor/include/
-          lipo -info vendor/lib/libarchive.a
+          cp /tmp/la-build-iphoneos/config.h vendor/include/
           echo "headers: $(ls vendor/include | wc -l)"
 
       - name: Create test fixtures

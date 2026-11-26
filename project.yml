@@ -49,9 +49,13 @@ targets:
         HEADER_SEARCH_PATHS:
           - $(inherited)
           - $(SRCROOT)/vendor/include
-        OTHER_LDFLAGS:
+        OTHER_LDFLAGS[sdk=iphoneos*]:
           - $(inherited)
           - -L$(SRCROOT)/vendor/lib
+          - -larchive
+        OTHER_LDFLAGS[sdk=iphonesimulator*]:
+          - $(inherited)
+          - -L$(SRCROOT)/vendor/lib-sim
           - -larchive
 
   FileNestTests:
