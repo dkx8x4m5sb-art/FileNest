@@ -5,7 +5,8 @@ enum ArchiveService {
 
     /// 列出条目。加密 ZIP 与 RAR 走 libarchive，其余走纯 Swift 实现。
     static func entries(of url: URL, password: String? = nil) throws -> [ArchiveEntry] {
-        switch ArchiveFormat.detect(url: url) {
+        let format = ArchiveFormat.detect(url: url)
+        switch format {
         case .zip, .rar, .iso, .cab:
             return try libarchiveEntries(url, password: password)
         case .sevenZip:
@@ -15,6 +16,11 @@ enum ArchiveService {
             let data = try Data(contentsOf: url)
             return try TarContainer.open(container: data).map { ArchiveEntry.from($0.info) }
         case .gzip, .bzip2, .xz:
+            // .tar.gz / .tar.bz2 / .tar.xz 需要再展开一层
+            let payload = try decompress(url, format: format)
+            if looksLikeTar(payload) {
+                return try TarContainer.open(container: payload).map { ArchiveEntry.from($0.info) }
+            }
             return [singleEntry(url)]
         case .unknown:
             throw ArchiveError.unsupportedFormat
@@ -49,17 +55,17 @@ enum ArchiveService {
             try write(pairs, to: destination, progress: progress)
 
         case .gzip, .bzip2, .xz:
-            let data = try Data(contentsOf: url)
-            let payload: Data
-            switch format {
-            case .gzip: payload = try GzipArchive.unarchive(archive: data)
-            case .bzip2: payload = try BZip2.decompress(data: data)
-            default: payload = try XZArchive.unarchive(archive: data)
+            let payload = try decompress(url, format: format)
+            if looksLikeTar(payload) {
+                let items = try TarContainer.open(container: payload)
+                let pairs = items.map { (ArchiveEntry.from($0.info), $0.data) }
+                try write(pairs, to: destination, progress: progress)
+            } else {
+                let entry = singleEntry(url)
+                let target = try ArchivePathResolver.resolve(entry.path, in: destination)
+                try payload.write(to: target)
+                progress(1, entry.name)
             }
-            let entry = singleEntry(url)
-            let target = try ArchivePathResolver.resolve(entry.path, in: destination)
-            try payload.write(to: target)
-            progress(1, entry.name)
 
         case .unknown:
             throw ArchiveError.unsupportedFormat
@@ -67,6 +73,23 @@ enum ArchiveService {
     }
 
     // MARK: - Helpers
+
+    private static func decompress(_ url: URL, format: ArchiveFormat) throws -> Data {
+        let data = try Data(contentsOf: url)
+        switch format {
+        case .gzip: return try GzipArchive.unarchive(archive: data)
+        case .bzip2: return try BZip2.decompress(data: data)
+        case .xz: return try XZArchive.unarchive(archive: data)
+        default: return data
+        }
+    }
+
+    private static func looksLikeTar(_ data: Data) -> Bool {
+        let head = [UInt8](data.prefix(512))
+        guard head.count > 261 else { return false }
+        return head[257] == 0x75 && head[258] == 0x73 && head[259] == 0x74
+            && head[260] == 0x61 && head[261] == 0x72
+    }
 
     private static func libarchiveEntries(_ url: URL, password: String?) throws -> [ArchiveEntry] {
         let reader = try LibArchiveReader(path: url.path, password: password)
