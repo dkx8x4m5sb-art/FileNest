@@ -1,0 +1,82 @@
+name: Build Unsigned IPA
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build unsigned IPA (Xcode 27 / iOS 27 SDK)
+    runs-on: xcode-27
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          xcode-select -p
+          xcrun --sdk iphoneos --show-sdk-version
+          xcrun --sdk iphoneos --show-sdk-path
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate --spec project.yml
+
+      - name: Build without code signing
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project FileNest.xcodeproj \
+            -scheme FileNest \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGN_ENTITLEMENTS="" \
+            ONLY_ACTIVE_ARCH=NO \
+            build 2>&1 | tee build.log
+
+      - name: Package into IPA
+        run: |
+          APP="build/Build/Products/Release-iphoneos/FileNest.app"
+          if [ ! -d "$APP" ]; then
+            echo "::error::app bundle not found"
+            find build/Build/Products -maxdepth 2 -print
+            exit 1
+          fi
+          rm -rf Payload && mkdir Payload
+          cp -R "$APP" Payload/
+          zip -qry FileNest-unsigned.ipa Payload
+          unzip -l FileNest-unsigned.ipa | head -20
+          ls -lh FileNest-unsigned.ipa
+
+      - name: Verify unsigned
+        run: |
+          codesign -dv Payload/FileNest.app 2>&1 || echo "no signature present (expected)"
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: FileNest-unsigned-ipa
+          path: FileNest-unsigned.ipa
+          retention-days: 30
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+          retention-days: 7
