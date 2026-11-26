@@ -65,6 +65,8 @@ struct BrowserView: View {
         }
         .animation(.easeInOut(duration: 0.2), value: store.isImportingFiles)
         .toolbar(.hidden, for: .navigationBar)
+        // 从子页面返回时（解压出新文件夹、删除源压缩包、重命名）刷新列表
+        .onAppear { store.reload() }
         .sheet(isPresented: $isImporting) {
             DocumentPicker(
                 onPick: { urls in

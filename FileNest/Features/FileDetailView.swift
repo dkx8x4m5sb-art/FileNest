@@ -1,5 +1,4 @@
 import SwiftUI
-import QuickLook
 import UIKit
 
 struct FileDetailView: View {
@@ -42,9 +41,9 @@ struct FileDetailView: View {
         }
         .navigationTitle(item.name)
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(isPresented: $showPreview) {
-            QuickLookView(url: item.url)
-                .ignoresSafeArea()
+        .toolbar(.visible, for: .navigationBar)
+        .fullScreenCover(isPresented: $showPreview) {
+            PreviewView(item: item)
         }
     }
 
@@ -57,37 +56,5 @@ struct FileDetailView: View {
                 .multilineTextAlignment(.trailing)
         }
         .font(.system(size: 15))
-    }
-}
-
-struct QuickLookView: UIViewControllerRepresentable {
-    let url: URL
-
-    func makeUIViewController(context: Context) -> QLPreviewController {
-        let controller = QLPreviewController()
-        controller.dataSource = context.coordinator
-        return controller
-    }
-
-    func updateUIViewController(_ controller: QLPreviewController, context: Context) {}
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(url: url)
-    }
-
-    final class Coordinator: NSObject, QLPreviewControllerDataSource {
-        let url: URL
-
-        init(url: URL) {
-            self.url = url
-        }
-
-        func numberOfPreviewItems(in controller: QLPreviewController) -> Int {
-            1
-        }
-
-        func previewController(_ controller: QLPreviewController, previewItemAt index: Int) -> QLPreviewItem {
-            url as NSURL
-        }
     }
 }

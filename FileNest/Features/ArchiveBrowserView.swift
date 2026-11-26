@@ -3,6 +3,8 @@ import SwiftUI
 struct ArchiveBrowserView: View {
     let item: FileItem
 
+    @Environment(\.dismiss) private var dismiss
+
     @State private var entries: [ArchiveEntry] = []
     @State private var isLoading = true
     @State private var errorText: String?
@@ -13,6 +15,8 @@ struct ArchiveBrowserView: View {
     @State private var progress: Double = 0
     @State private var currentEntry = ""
     @State private var resultText: String?
+    @State private var showResult = false
+    @State private var sourceRemoved = false
 
     private var format: ArchiveFormat { ArchiveFormat.detect(url: item.url) }
 
@@ -38,8 +42,18 @@ struct ArchiveBrowserView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button {
-                    extract()
+                Menu {
+                    Button {
+                        extract(removingSource: false)
+                    } label: {
+                        Label("解压到此处", systemImage: "arrow.down.doc")
+                    }
+
+                    Button {
+                        extract(removingSource: true)
+                    } label: {
+                        Label("解压并删除源压缩包", systemImage: "trash")
+                    }
                 } label: {
                     Image(systemName: "arrow.down.doc")
                 }
@@ -50,21 +64,24 @@ struct ArchiveBrowserView: View {
             passwordSheet
         }
         .overlay { extractingOverlay }
-        .alert("已解压", isPresented: Binding(
-            get: { resultText != nil },
-            set: { if !$0 { resultText = nil } }
-        )) {
-            Button("好", role: .cancel) { resultText = nil }
+        .alert("已解压", isPresented: $showResult) {
+            if !sourceRemoved {
+                Button("删除源压缩包", role: .destructive) { removeSource() }
+            }
+            Button("完成", role: .cancel) { dismiss() }
         } message: {
             Text(resultText ?? "")
         }
-        .alert("出错了", isPresented: Binding(
-            get: { errorText != nil },
-            set: { if !$0 { errorText = nil } }
-        )) {
-            Button("好", role: .cancel) { errorText = nil }
-        } message: {
-            Text(errorText ?? "")
+        // 挂在独立的背景视图上，避免和上面的弹窗互相覆盖
+        .background {
+            Color.clear.alert("出错了", isPresented: Binding(
+                get: { errorText != nil },
+                set: { if !$0 { errorText = nil } }
+            )) {
+                Button("好", role: .cancel) { errorText = nil }
+            } message: {
+                Text(errorText ?? "")
+            }
         }
         .task { load() }
     }
@@ -183,13 +200,16 @@ struct ArchiveBrowserView: View {
         }
     }
 
-    private func extract() {
+    private func extract(removingSource: Bool) {
         isExtracting = true
         progress = 0
         currentEntry = ""
+        sourceRemoved = false
+
         let url = item.url
         let pwd = password.isEmpty ? nil : password
         let destination = destinationURL()
+
         DispatchQueue.global(qos: .userInitiated).async {
             do {
                 try ArchiveService.extract(url, to: destination, password: pwd) { value, name in
@@ -198,9 +218,19 @@ struct ArchiveBrowserView: View {
                         self.currentEntry = name
                     }
                 }
+
+                var removed = false
+                if removingSource {
+                    removed = (try? FileManager.default.removeItem(at: url)) != nil
+                }
+
                 DispatchQueue.main.async {
                     self.isExtracting = false
-                    self.resultText = "已解压到「\(destination.lastPathComponent)」"
+                    self.sourceRemoved = removed
+                    self.resultText = removed
+                        ? "已解压到「\(destination.lastPathComponent)」，源压缩包已删除"
+                        : "已解压到「\(destination.lastPathComponent)」"
+                    self.showResult = true
                 }
             } catch {
                 DispatchQueue.main.async {
@@ -208,6 +238,16 @@ struct ArchiveBrowserView: View {
                     self.errorText = error.localizedDescription
                 }
             }
+        }
+    }
+
+    private func removeSource() {
+        do {
+            try FileManager.default.removeItem(at: item.url)
+            sourceRemoved = true
+            dismiss()
+        } catch {
+            errorText = error.localizedDescription
         }
     }
 

@@ -6,18 +6,37 @@ iOS 文件管理器与压缩包解压工具。SwiftUI 实现，通过 GitHub Act
 
 ## 格式支持
 
-| 格式 | 读取 | 解压 | 加密 | 引擎 |
-|---|---|---|---|---|
-| ZIP | ✅ | ✅ | ✅ ZipCrypto / AES | libarchive |
-| RAR / RAR5 | ✅ | ✅ | ✅ | libarchive |
-| 7-Zip | ✅ | ✅ | 部分 | SWCompression |
-| TAR | ✅ | ✅ | — | SWCompression |
-| GZip / TGZ | ✅ | ✅ | — | SWCompression |
-| BZip2 | ✅ | ✅ | — | SWCompression |
-| XZ | ✅ | ✅ | — | SWCompression |
-| ISO / CAB | ✅ | ✅ | — | libarchive |
+### 解压
+
+| 格式 | 扩展名 | 读取 | 解压 | 加密 | 引擎 |
+|---|---|---|---|---|---|
+| ZIP | zip, cbz | ✅ | ✅ | ✅ ZipCrypto / AES | libarchive |
+| RAR / RAR5 | rar, cbr | ✅ | ✅ | ✅ | libarchive |
+| 7-Zip | 7z | ✅ | ✅ | ❌ | SWCompression |
+| TAR | tar | ✅ | ✅ | — | SWCompression |
+| GZip | gz, tgz | ✅ | ✅（内层 tar 自动展开） | — | SWCompression |
+| BZip2 | bz2, tbz, tbz2 | ✅ | ✅（内层 tar 自动展开） | — | SWCompression |
+| XZ | xz, txz | ✅ | ✅（内层 tar 自动展开） | — | SWCompression |
+| ISO | iso | ✅ | ✅ | — | libarchive |
+| CAB | cab | ✅ | ✅ | — | libarchive |
 
 格式识别读文件头魔数，不看扩展名——改了后缀的包也能正确识别。
+
+不支持：DMG、ARJ、LZH/LHA、ACE、Z（compress）、分卷压缩包、加密 7z。遇到这些会明确报「无法识别这个压缩包的格式」，不会静默失败。
+
+### 预览
+
+| 类型 | 扩展名 | 实现 |
+|---|---|---|
+| 图片（可双指缩放、双击放大） | jpg, jpeg, png, gif, heic, heif, webp, tiff, bmp | UIImage + UIScrollView |
+| PDF（连续滚动、自动缩放） | pdf | PDFKit |
+| 文本 / 代码（等宽、可选中、自动识别 GB18030） | txt, md, log, csv, json, xml, yml, swift, py, js, html, css, sh … | 原生文本视图 |
+| 音频 / 视频 | mp3, m4a, aac, wav, flac, mp4, mov, m4v | AVKit |
+| Office 及其余可预览格式 | docx, xlsx, pptx, rtf, svg … | QuickLook |
+| 无法预览 | 老版 doc/xls、CAD、加密 PDF、DRM 音视频、压缩包 | 显示说明 + 分享 |
+
+文本预览上限 4 MB（超出只读前 4 MB 并提示），避免大文件把内存打满。
+
 
 ## 为什么是两个引擎
 
