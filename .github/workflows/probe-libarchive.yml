@@ -7,33 +7,42 @@ jobs:
   probe:
     name: Cross-compile libarchive for iOS arm64
     runs-on: xcode-27
-    timeout-minutes: 30
+    timeout-minutes: 25
 
     steps:
       - name: Show toolchain
-        run: xcodebuild -version
+        run: |
+          xcodebuild -version
+          cmake --version | head -1
+          ninja --version || true
 
       - name: Inspect SDK static libraries
+        timeout-minutes: 3
         run: |
           SDK=$(xcrun --sdk iphoneos --show-sdk-path)
           echo "SDK=$SDK"
-          echo "--- compression related ---"
           ls "$SDK/usr/lib" | grep -E 'lib(z|bz2|lzma|iconv|archive)' || echo "none matched"
-          echo "--- headers ---"
-          for h in zlib.h bzlib.h lzma.h iconv.h; do
-            found=$(find "$SDK/usr/include" -name "$h" 2>/dev/null | head -1)
+          for h in zlib.h bzlib.h lzma.h; do
+            found=$(find "$SDK/usr/include" -maxdepth 2 -name "$h" 2>/dev/null | head -1)
             echo "$h -> ${found:-MISSING}"
           done
 
       - name: Clone libarchive
+        timeout-minutes: 5
         run: git clone --depth 1 https://github.com/libarchive/libarchive.git vendor-libarchive
 
-      - name: Configure for iOS arm64
+      - name: Configure for iOS arm64 (minimal)
+        timeout-minutes: 5
         run: |
-          cmake -B build-ios -S vendor-libarchive -G Xcode \
+          SDK=$(xcrun --sdk iphoneos --show-sdk-path)
+          cmake -B build-ios -S vendor-libarchive -G Ninja \
             -DCMAKE_SYSTEM_NAME=iOS \
             -DCMAKE_OSX_ARCHITECTURES=arm64 \
             -DCMAKE_OSX_DEPLOYMENT_TARGET=16.0 \
+            -DCMAKE_OSX_SYSROOT="$SDK" \
+            -DCMAKE_FIND_ROOT_PATH="$SDK" \
+            -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY \
+            -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY \
             -DENABLE_SHARED=OFF \
             -DENABLE_STATIC=ON \
             -DENABLE_TEST=OFF \
@@ -44,23 +53,24 @@ jobs:
             -DENABLE_LIBXML2=OFF \
             -DENABLE_EXPAT=OFF \
             -DENABLE_ZLIB=ON \
-            -DENABLE_BZip2=ON \
-            -DENABLE_LZMA=ON \
+            -DENABLE_BZip2=OFF \
+            -DENABLE_LZMA=OFF \
             -DENABLE_ZSTD=OFF \
-            -DENABLE_LZ4=OFF 2>&1 | tail -40
+            -DENABLE_LZ4=OFF
 
       - name: Build static library
-        run: |
-          cmake --build build-ios --config Release --target archive_static 2>&1 | tail -40
+        timeout-minutes: 8
+        run: cmake --build build-ios --target archive_static
 
       - name: Inspect artifact
+        timeout-minutes: 3
         run: |
-          echo "--- .a files ---"
+          echo "--- .a ---"
           find build-ios -name "*.a" -exec ls -lh {} \;
           echo "--- arch ---"
           find build-ios -name "libarchive.a" -exec lipo -info {} \;
-          echo "--- rar support symbol ---"
-          find build-ios -name "libarchive.a" -exec nm {} \; 2>/dev/null | grep -i "rar5" | head -5
+          echo "--- rar5 symbols ---"
+          find build-ios -name "libarchive.a" -exec nm {} \; 2>/dev/null | grep -ci "rar5" || true
           echo "--- headers ---"
           find build-ios -name "archive.h" | head -3
           find build-ios -name "config.h" | head -3
