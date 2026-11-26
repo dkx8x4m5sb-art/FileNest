@@ -23,17 +23,20 @@ final class ArchiveTests: XCTestCase {
     // MARK: - 格式嗅探
 
     func testDetectZip() throws {
-        XCTAssertEqual(ArchiveFormat.detect(url: try fixture("sample", "zip")), .zip)
+        let url = try fixture("sample", "zip")
+        XCTAssertEqual(ArchiveFormat.detect(url: url), .zip)
     }
 
     func testDetectTarGz() throws {
-        XCTAssertEqual(ArchiveFormat.detect(url: try fixture("sample", "tar.gz")), .gzip)
+        let url = try fixture("sample", "tar.gz")
+        XCTAssertEqual(ArchiveFormat.detect(url: url), .gzip)
     }
 
     // MARK: - 条目读取
 
     func testZipEntriesListed() throws {
-        let entries = try ArchiveService.entries(of: try fixture("sample", "zip"))
+        let url = try fixture("sample", "zip")
+        let entries = try ArchiveService.entries(of: url)
         let names = entries.map { $0.name }
         XCTAssertTrue(names.contains("hello.txt"), "实际条目：\(names)")
         XCTAssertFalse(entries.contains { $0.isDirectory && $0.path.isEmpty })
@@ -45,7 +48,8 @@ final class ArchiveTests: XCTestCase {
         let destination = try makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: destination) }
 
-        try ArchiveService.extract(try fixture("sample", "zip"), to: destination, password: nil) { _, _ in }
+        let source = try fixture("sample", "zip")
+        try ArchiveService.extract(source, to: destination, password: nil) { _, _ in }
 
         let file = destination.appendingPathComponent("hello.txt")
         XCTAssertTrue(FileManager.default.fileExists(atPath: file.path))
@@ -59,11 +63,13 @@ final class ArchiveTests: XCTestCase {
         let destination = try makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: destination) }
 
-        try ArchiveService.extract(try fixture("sample", "zip"), to: destination, password: nil) { _, _ in }
+        let source = try fixture("sample", "zip")
+        try ArchiveService.extract(source, to: destination, password: nil) { _, _ in }
 
         let chinese = destination.appendingPathComponent("中文名.txt")
+        let listing = (try? FileManager.default.contentsOfDirectory(atPath: destination.path)) ?? []
         XCTAssertTrue(FileManager.default.fileExists(atPath: chinese.path),
-                      "中文文件名未正确还原，实际目录：\(try FileManager.default.contentsOfDirectory(atPath: destination.path))")
+                      "中文文件名未正确还原，实际目录：\(listing)")
         let text = try String(contentsOf: chinese, encoding: .utf8)
         XCTAssertTrue(text.contains("中文内容测试"))
     }
@@ -72,7 +78,8 @@ final class ArchiveTests: XCTestCase {
         let destination = try makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: destination) }
 
-        try ArchiveService.extract(try fixture("sample", "zip"), to: destination, password: nil) { _, _ in }
+        let source = try fixture("sample", "zip")
+        try ArchiveService.extract(source, to: destination, password: nil) { _, _ in }
 
         let nested = destination.appendingPathComponent("sub/nested.txt")
         XCTAssertTrue(FileManager.default.fileExists(atPath: nested.path))
@@ -82,7 +89,8 @@ final class ArchiveTests: XCTestCase {
         let destination = try makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: destination) }
 
-        try ArchiveService.extract(try fixture("sample", "tar.gz"), to: destination, password: nil) { _, _ in }
+        let source = try fixture("sample", "tar.gz")
+        try ArchiveService.extract(source, to: destination, password: nil) { _, _ in }
 
         let file = destination.appendingPathComponent("hello.txt")
         XCTAssertTrue(FileManager.default.fileExists(atPath: file.path))

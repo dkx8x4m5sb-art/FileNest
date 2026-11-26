@@ -1,22 +1,52 @@
 # FileNest
 
-iOS 文件管理器与压缩包解压工具。SwiftUI 实现，通过 GitHub Actions 产出**未签名 IPA**。
+iOS 文件管理器与压缩包解压工具。SwiftUI 实现，通过 GitHub Actions 用 **Xcode 27 / iOS 27 SDK** 产出**未签名 IPA**。
 
-## 当前状态
+无需 Mac，无需开发者证书。
 
-`阶段 0：链路打通` — 工程骨架、文件浏览、预览已就绪，解压引擎尚未接入。
-目标先让 CI 稳定产出可下载的 ipa，再逐步堆功能。
+## 格式支持
+
+| 格式 | 读取 | 解压 | 加密 | 引擎 |
+|---|---|---|---|---|
+| ZIP | ✅ | ✅ | ✅ ZipCrypto / AES | libarchive |
+| RAR / RAR5 | ✅ | ✅ | ✅ | libarchive |
+| 7-Zip | ✅ | ✅ | 部分 | SWCompression |
+| TAR | ✅ | ✅ | — | SWCompression |
+| GZip / TGZ | ✅ | ✅ | — | SWCompression |
+| BZip2 | ✅ | ✅ | — | SWCompression |
+| XZ | ✅ | ✅ | — | SWCompression |
+| ISO / CAB | ✅ | ✅ | — | libarchive |
+
+格式识别读文件头魔数，不看扩展名——改了后缀的包也能正确识别。
+
+## 为什么是两个引擎
+
+这不是选择困难，是 iOS 的客观限制：
+
+- **libarchive** 是唯一能解 RAR 的宽松许可实现（BSD）。但 iOS SDK 有 `libz.tbd`、`libbz2.tbd`，**没有 `lzma.h`**，所以它编不出 7z 的 LZMA 解码能力。
+- **SWCompression** 是纯 Swift（MIT），自带 LZMA/LZMA2 实现，覆盖 7z / XZ / TAR，但**不支持 RAR，也不支持加密 ZIP**。
+
+所以分工是互补而非冗余：RAR 和加密 ZIP 走 libarchive，其余走 SWCompression。
+
+libarchive 在 CI 里用 CMake 交叉编译成 iOS 静态库（真机 + 模拟器两个 slice），并链接 `libiconv` 处理中文文件名的字符集转换。
 
 ## 构建
 
-无需 Mac，也无需开发者证书。向 `main` 分支推送即触发构建，或在 Actions 页手动 `Run workflow`。
+推送 `main` 即触发，或在 Actions 页手动 `Run workflow`。产物在 **Artifacts → FileNest-unsigned-ipa**，约 700 KB。
 
-产物在 Actions 运行的 **Artifacts → FileNest-unsigned-ipa**。
+流水线做的事：
+
+1. 交叉编译 libarchive（arm64 device + arm64 simulator）
+2. 用 XcodeGen 从 `project.yml` 生成 `.xcodeproj`
+3. `xcodebuild` 以 `CODE_SIGNING_ALLOWED=NO` 编译
+4. 打包成 `Payload/FileNest.app` → zip → ipa
+5. 在 iOS 27 模拟器上跑解压单元测试
 
 本地构建（需 macOS + Xcode）：
 
 ```bash
-brew install xcodegen
+brew install xcodegen cmake ninja
+# 需先自行编译 libarchive 到 vendor/，参见 .github/workflows/build.yml
 xcodegen generate
 open FileNest.xcodeproj
 ```
@@ -32,26 +62,24 @@ open FileNest.xcodeproj
 | ESign / 企业证书 | 否 | 取决于证书 |
 | TrollStore | 否 | 永久，但仅特定 iOS 版本 |
 
-免费 Apple ID 每次重签有效期 7 天，最多同时安装 3 个自签 App。
+免费 Apple ID 每次重签 7 天有效，最多同时安装 3 个自签 App。
 
 ## 已实现
 
-- 沙盒目录浏览，文件夹逐级下钻
-- 按名称 / 大小 / 修改日期排序，升降序切换
-- 搜索过滤
-- 新建文件夹（自动处理重名）
-- 删除（带确认）、重命名
-- 从「文件」App 导入（多选，安全作用域访问）
-- 按扩展名分类的图标与配色
-- QuickLook 预览、系统分享
-- 暴露到「文件」App：`UIFileSharingEnabled` + `LSSupportsOpeningDocumentsInPlace`
+**文件管理**：沙盒目录浏览、逐级下钻、按名称/大小/日期排序、搜索、新建文件夹、删除（带确认）、重命名、从「文件」App 多选导入、按类型着色的图标、QuickLook 预览、系统分享。
 
-## 计划
+**解压**：格式嗅探、条目列表（不解压即可查看内部结构）、全部解压、实时进度、密码解锁、Zip Slip 路径逃逸防护、同名目录自动避让。
 
-- **阶段 1** 解压引擎：libarchive 接入，覆盖 ZIP / 7z / RAR / TAR / GZ / BZ2 / XZ
-- **阶段 2** 压缩包内直接浏览、密码解锁、解压进度、批量队列
-- **阶段 3** 专用查看器：文本代码、十六进制、SQLite、图片 EXIF
-- **阶段 4** 深色模式、国际化、大文件防息屏
+**系统集成**：`UIFileSharingEnabled` + `LSSupportsOpeningDocumentsInPlace`，App 出现在「文件」App 的「我的 iPhone」下。
+
+最低支持 iOS 17.0（SWCompression 4.9 的要求）。
+
+## 待办
+
+- 压缩包内单条内容预览（当前只能看列表）
+- 压缩功能（选文件 → 打包 ZIP）
+- 解压时的 GBK 文件名兜底（目前依赖 libiconv 自动判定，Windows 老包仍可能乱码）
+- 大文件解压的前台保活与中断恢复
 
 ## 已知边界
 
@@ -61,4 +89,4 @@ iOS 沙盒不允许访问其他 App 的数据。本 App 只能管理自己的 Do
 
 ## 许可
 
-MIT
+MIT。libarchive 为 BSD-2-Clause，SWCompression 为 MIT。
