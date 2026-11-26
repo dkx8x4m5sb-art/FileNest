@@ -1,0 +1,66 @@
+name: Probe libarchive for iOS
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    name: Cross-compile libarchive for iOS arm64
+    runs-on: xcode-27
+    timeout-minutes: 30
+
+    steps:
+      - name: Show toolchain
+        run: xcodebuild -version
+
+      - name: Inspect SDK static libraries
+        run: |
+          SDK=$(xcrun --sdk iphoneos --show-sdk-path)
+          echo "SDK=$SDK"
+          echo "--- compression related ---"
+          ls "$SDK/usr/lib" | grep -E 'lib(z|bz2|lzma|iconv|archive)' || echo "none matched"
+          echo "--- headers ---"
+          for h in zlib.h bzlib.h lzma.h iconv.h; do
+            found=$(find "$SDK/usr/include" -name "$h" 2>/dev/null | head -1)
+            echo "$h -> ${found:-MISSING}"
+          done
+
+      - name: Clone libarchive
+        run: git clone --depth 1 https://github.com/libarchive/libarchive.git vendor-libarchive
+
+      - name: Configure for iOS arm64
+        run: |
+          cmake -B build-ios -S vendor-libarchive -G Xcode \
+            -DCMAKE_SYSTEM_NAME=iOS \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=16.0 \
+            -DENABLE_SHARED=OFF \
+            -DENABLE_STATIC=ON \
+            -DENABLE_TEST=OFF \
+            -DENABLE_TAR=OFF \
+            -DENABLE_CPIO=OFF \
+            -DENABLE_CAT=OFF \
+            -DENABLE_OPENSSL=OFF \
+            -DENABLE_LIBXML2=OFF \
+            -DENABLE_EXPAT=OFF \
+            -DENABLE_ZLIB=ON \
+            -DENABLE_BZip2=ON \
+            -DENABLE_LZMA=ON \
+            -DENABLE_ZSTD=OFF \
+            -DENABLE_LZ4=OFF 2>&1 | tail -40
+
+      - name: Build static library
+        run: |
+          cmake --build build-ios --config Release --target archive_static 2>&1 | tail -40
+
+      - name: Inspect artifact
+        run: |
+          echo "--- .a files ---"
+          find build-ios -name "*.a" -exec ls -lh {} \;
+          echo "--- arch ---"
+          find build-ios -name "libarchive.a" -exec lipo -info {} \;
+          echo "--- rar support symbol ---"
+          find build-ios -name "libarchive.a" -exec nm {} \; 2>/dev/null | grep -i "rar5" | head -5
+          echo "--- headers ---"
+          find build-ios -name "archive.h" | head -3
+          find build-ios -name "config.h" | head -3
