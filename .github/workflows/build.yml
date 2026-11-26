@@ -67,6 +67,18 @@ jobs:
           lipo -info vendor/lib/libarchive.a
           echo "headers: $(ls vendor/include | wc -l)"
 
+      - name: Create test fixtures
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/fx && mkdir -p /tmp/fx/sub
+          printf 'hello filenest\n' > /tmp/fx/hello.txt
+          printf '中文内容测试\n' > "/tmp/fx/中文名.txt"
+          printf 'nested\n' > /tmp/fx/sub/nested.txt
+          mkdir -p FileNestTests/Fixtures
+          (cd /tmp/fx && zip -qr "$GITHUB_WORKSPACE/FileNestTests/Fixtures/sample.zip" hello.txt "中文名.txt" sub)
+          tar -czf FileNestTests/Fixtures/sample.tar.gz -C /tmp/fx hello.txt
+          ls -la FileNestTests/Fixtures
+
       - name: Install XcodeGen
         run: brew install xcodegen
 
@@ -88,6 +100,30 @@ jobs:
             CODE_SIGN_ENTITLEMENTS="" \
             ONLY_ACTIVE_ARCH=NO \
             build 2>&1 | tee build.log
+
+      - name: Run unit tests
+        timeout-minutes: 15
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          xcrun simctl list devices available | head -15
+          xcodebuild test \
+            -project FileNest.xcodeproj \
+            -scheme FileNest \
+            -destination 'platform=iOS Simulator,name=iPhone 17' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            2>&1 | tee test.log | tail -60
+
+      - name: Upload test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-log
+          path: test.log
+          retention-days: 7
 
       - name: Package into IPA
         run: |

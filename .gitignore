@@ -16,3 +16,6 @@ vendor/
 
 # XcodeGen 生成物（由 project.yml 生成，不入库）
 FileNest.xcodeproj/
+test.log
+FileNestTests/Fixtures/*.zip
+FileNestTests/Fixtures/*.tar.gz
