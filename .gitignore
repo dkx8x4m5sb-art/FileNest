@@ -11,5 +11,8 @@ Payload/
 *.ipa
 build.log
 
+# libarchive 交叉编译产物（CI 每次生成）
+vendor/
+
 # XcodeGen 生成物（由 project.yml 生成，不入库）
 FileNest.xcodeproj/

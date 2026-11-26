@@ -7,6 +7,11 @@ options:
   createIntermediateGroups: true
   groupSortPosition: top
 
+packages:
+  SWCompression:
+    url: https://github.com/tsolomko/SWCompression.git
+    from: 4.9.0
+
 settings:
   base:
     MARKETING_VERSION: "1.0.0"
@@ -24,6 +29,9 @@ targets:
       - path: FileNest
         excludes:
           - "Resources/Info.plist"
+    dependencies:
+      - package: SWCompression
+      - sdk: libz.tbd
     settings:
       base:
         INFOPLIST_FILE: FileNest/Resources/Info.plist
@@ -35,6 +43,14 @@ targets:
         CODE_SIGNING_REQUIRED: "NO"
         CODE_SIGN_IDENTITY: ""
         SWIFT_EMIT_LOC_STRINGS: "NO"
+        SWIFT_OBJC_BRIDGING_HEADER: FileNest/FileNest-Bridging-Header.h
+        HEADER_SEARCH_PATHS:
+          - $(inherited)
+          - $(SRCROOT)/vendor/include
+        OTHER_LDFLAGS:
+          - $(inherited)
+          - -L$(SRCROOT)/vendor/lib
+          - -larchive
 
 schemes:
   FileNest:

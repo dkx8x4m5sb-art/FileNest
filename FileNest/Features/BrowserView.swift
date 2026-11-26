@@ -87,6 +87,12 @@ struct BrowserView: View {
             } label: {
                 FileRow(item: item)
             }
+        } else if item.kind == .archive {
+            NavigationLink {
+                ArchiveBrowserView(item: item)
+            } label: {
+                FileRow(item: item)
+            }
         } else {
             NavigationLink {
                 FileDetailView(item: item)
