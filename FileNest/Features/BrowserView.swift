@@ -38,6 +38,19 @@ struct BrowserView: View {
                 content
             }
 
+            // 底部渐隐，避免滚动内容直接怼在悬浮按钮下面
+            VStack {
+                Spacer()
+                LinearGradient(
+                    colors: [Color(.systemBackground).opacity(0), Color(.systemBackground)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 96)
+                .allowsHitTesting(false)
+            }
+            .ignoresSafeArea(edges: .bottom)
+
             VStack(spacing: 14) {
                 if let error = store.errorMessage {
                     toast(error)

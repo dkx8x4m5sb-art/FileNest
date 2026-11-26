@@ -31,7 +31,7 @@ struct FileCard: View {
             Spacer(minLength: 8)
 
             Text(item.name)
-                .font(.system(size: 15.5, weight: .semibold))
+                .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(.white)
                 .lineLimit(2)
                 .truncationMode(.middle)
