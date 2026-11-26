@@ -12,7 +12,7 @@ struct FileNestApp: App {
 struct RootView: View {
     var body: some View {
         NavigationStack {
-            BrowserView(folder: FileManager.default.documentsURL)
+            BrowserView(folder: FileManager.default.documentsURL, isRoot: true)
         }
     }
 }

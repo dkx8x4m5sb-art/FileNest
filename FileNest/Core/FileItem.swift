@@ -96,4 +96,31 @@ extension FileKind {
         case .other: return .secondary
         }
     }
+
+    /// 卡片渐变：沿用「快捷指令」按类别着色的语义，颜色与文件类型一一对应
+    var gradient: [Color] {
+        switch self {
+        case .folder:  return [Color(hex: 0x3FA9F5), Color(hex: 0x0066CC)]
+        case .archive: return [Color(hex: 0xFFB340), Color(hex: 0xE0590A)]
+        case .image:   return [Color(hex: 0x4ADE80), Color(hex: 0x129C46)]
+        case .video:   return [Color(hex: 0xFF7A94), Color(hex: 0xD3244A)]
+        case .audio:   return [Color(hex: 0xC77DFF), Color(hex: 0x8A3FD1)]
+        case .pdf:     return [Color(hex: 0xFF8079), Color(hex: 0xC4302A)]
+        case .code:    return [Color(hex: 0x8B88FF), Color(hex: 0x4A47D6)]
+        case .text:    return [Color(hex: 0x9A9AA1), Color(hex: 0x5C5C63)]
+        case .other:   return [Color(hex: 0x8E8E93), Color(hex: 0x48484C)]
+        }
+    }
+}
+
+extension Color {
+    init(hex: UInt32) {
+        self.init(
+            .sRGB,
+            red: Double((hex >> 16) & 0xFF) / 255,
+            green: Double((hex >> 8) & 0xFF) / 255,
+            blue: Double(hex & 0xFF) / 255,
+            opacity: 1
+        )
+    }
 }

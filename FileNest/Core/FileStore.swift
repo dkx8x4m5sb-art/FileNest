@@ -60,8 +60,10 @@ final class FileStore: ObservableObject {
     }
 
     var title: String {
+        let documents = FileManager.default.documentsURL.standardizedFileURL
+        if folder.standardizedFileURL == documents { return "我的文件" }
         let name = folder.lastPathComponent
-        return name.isEmpty ? "文件" : name
+        return name.isEmpty ? "我的文件" : name
     }
 
     func reload() {
