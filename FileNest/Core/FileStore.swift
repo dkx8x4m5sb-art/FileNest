@@ -107,6 +107,58 @@ final class FileStore: ObservableObject {
         }
     }
 
+    /// 批量删除。失败项会汇总成一条提示，不中断其余项目。
+    func delete(items: [FileItem]) {
+        guard !items.isEmpty else { return }
+        var failures: [String] = []
+        for item in items {
+            do {
+                try FileManager.default.removeItem(at: item.url)
+            } catch {
+                failures.append("\(item.name)：\(error.localizedDescription)")
+            }
+        }
+        reload()
+        if !failures.isEmpty {
+            errorMessage = "\(items.count - failures.count) 个已删除，\(failures.count) 个失败\n"
+                + failures.prefix(2).joined(separator: "\n")
+        }
+    }
+
+    /// 批量移动。目标目录内同名时自动改名为「名称 2」。
+    func move(items: [FileItem], to destination: URL) {
+        guard !items.isEmpty else { return }
+        let target = destination.standardizedFileURL
+        var failures: [String] = []
+        var moved = 0
+
+        for item in items {
+            // 已经在目标目录里，跳过
+            if item.url.deletingLastPathComponent().standardizedFileURL == target { continue }
+            // 不能把文件夹移进它自己或它的子目录
+            let sourcePath = item.url.standardizedFileURL.path
+            let targetPath = target.path
+            if item.isDirectory, targetPath == sourcePath || targetPath.hasPrefix(sourcePath + "/") {
+                failures.append("\(item.name)：不能移动到自身目录")
+                continue
+            }
+
+            let newURL = Self.uniqueDestination(for: item.name, in: destination)
+            do {
+                try FileManager.default.moveItem(at: item.url, to: newURL)
+                moved += 1
+            } catch {
+                failures.append("\(item.name)：\(error.localizedDescription)")
+            }
+        }
+
+        reload()
+        if !failures.isEmpty {
+            errorMessage = "\(moved) 个已移动，\(failures.count) 个失败\n"
+                + failures.prefix(2).joined(separator: "\n")
+        }
+    }
+
     @discardableResult
     func rename(_ item: FileItem, to rawName: String) -> Bool {
         let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)

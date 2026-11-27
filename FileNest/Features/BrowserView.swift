@@ -9,6 +9,7 @@ struct BrowserView: View {
     private let isRoot: Bool
 
     @State private var isImporting = false
+    @State private var showSettings = false
 
     @State private var promptMode: PromptMode = .newFolder
     @State private var showPrompt = false
@@ -16,6 +17,12 @@ struct BrowserView: View {
 
     @State private var pendingDelete: FileItem?
     @State private var showDeleteDialog = false
+
+    // 多选
+    @State private var isSelecting = false
+    @State private var selected: Set<String> = []
+    @State private var showMoveSheet = false
+    @State private var showBatchDelete = false
 
     private enum PromptMode {
         case newFolder
@@ -55,15 +62,26 @@ struct BrowserView: View {
                 if let error = store.errorMessage {
                     toast(error)
                 }
-                importButton
+                if isSelecting {
+                    selectionBar
+                } else {
+                    importButton
+                }
             }
             .padding(.bottom, 10)
+            .sheet(isPresented: $showMoveSheet) {
+                MoveDestinationsView(items: selectedItems) { destination in
+                    store.move(items: selectedItems, to: destination)
+                    exitSelection()
+                }
+            }
 
             if store.isImportingFiles {
                 importingOverlay
             }
         }
         .animation(.easeInOut(duration: 0.2), value: store.isImportingFiles)
+        .animation(.easeInOut(duration: 0.18), value: isSelecting)
         .toolbar(.hidden, for: .navigationBar)
         // 从子页面返回时（解压出新文件夹、删除源压缩包、重命名）刷新列表
         .onAppear { store.reload() }
@@ -106,62 +124,120 @@ struct BrowserView: View {
 
     // MARK: - 顶部
 
+    @ViewBuilder
     private var topBar: some View {
-        HStack(spacing: 12) {
-            if isRoot {
-                Color.clear.frame(width: 44, height: 42)
-            } else {
+        if isSelecting {
+            HStack {
                 Button {
-                    dismiss()
+                    exitSelection()
                 } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(.primary)
-                        .frame(width: 44, height: 42)
-                        .background(Color(.secondarySystemBackground), in: Circle())
+                    Text("取消")
+                        .font(.system(size: 16, weight: .medium))
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("返回")
+
+                Spacer(minLength: 0)
+
+                Button {
+                    toggleSelectAll()
+                } label: {
+                    Text(allSelected ? "取消全选" : "全选")
+                        .font(.system(size: 16, weight: .medium))
+                }
+                .disabled(store.visibleItems.isEmpty)
             }
-
-            Spacer(minLength: 0)
-
-            HStack(spacing: 0) {
-                Menu {
-                    Picker("排序方式", selection: $store.sortField) {
-                        ForEach(SortField.allCases) { field in
-                            Text(field.label).tag(field)
-                        }
-                    }
-                    Divider()
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+            .frame(height: 50)
+        } else {
+            HStack(spacing: 12) {
+                if isRoot {
+                    settingsButton
+                } else {
                     Button {
-                        store.ascending.toggle()
+                        dismiss()
                     } label: {
-                        Label(store.ascending ? "改为降序" : "改为升序",
-                              systemImage: store.ascending ? "arrow.down" : "arrow.up")
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(.primary)
+                            .frame(width: 44, height: 42)
+                            .background(Color(.secondarySystemBackground), in: Circle())
                     }
-                } label: {
-                    capsuleIcon("arrow.up.arrow.down")
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("返回")
                 }
 
-                Rectangle()
-                    .fill(Color.primary.opacity(0.12))
-                    .frame(width: 1, height: 20)
+                Spacer(minLength: 0)
 
-                Button {
-                    promptMode = .newFolder
-                    promptText = ""
-                    showPrompt = true
-                } label: {
-                    capsuleIcon("folder.badge.plus")
+                HStack(spacing: 0) {
+                    Menu {
+                        Picker("排序方式", selection: $store.sortField) {
+                            ForEach(SortField.allCases) { field in
+                                Text(field.label).tag(field)
+                            }
+                        }
+                        Divider()
+                        Button {
+                            store.ascending.toggle()
+                        } label: {
+                            Label(store.ascending ? "改为降序" : "改为升序",
+                                  systemImage: store.ascending ? "arrow.down" : "arrow.up")
+                        }
+                    } label: {
+                        capsuleIcon("arrow.up.arrow.down")
+                    }
+
+                    divider
+
+                    Button {
+                        promptMode = .newFolder
+                        promptText = ""
+                        showPrompt = true
+                    } label: {
+                        capsuleIcon("folder.badge.plus")
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("新建文件夹")
+
+                    divider
+
+                    Button {
+                        enterSelection()
+                    } label: {
+                        capsuleIcon("checkmark.circle")
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("选择")
+                    .disabled(store.visibleItems.isEmpty)
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("新建文件夹")
+                .background(Color(.secondarySystemBackground), in: Capsule())
             }
-            .background(Color(.secondarySystemBackground), in: Capsule())
+            .padding(.horizontal, 16)
+            .padding(.top, 6)
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 6)
+    }
+
+    private var divider: some View {
+        Rectangle()
+            .fill(Color.primary.opacity(0.12))
+            .frame(width: 1, height: 20)
+    }
+
+    private var settingsButton: some View {
+        Button {
+            showSettings = true
+        } label: {
+            Image(systemName: "gearshape.fill")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(.primary)
+                .frame(width: 44, height: 42)
+                .background(Color(.secondarySystemBackground), in: Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("设置")
+        .sheet(isPresented: $showSettings) {
+            SettingsView()
+        }
     }
 
     private func capsuleIcon(_ name: String) -> some View {
@@ -181,9 +257,9 @@ struct BrowserView: View {
 
             Spacer(minLength: 0)
 
-            Text("\(store.visibleItems.count) 项")
+            Text(isSelecting ? "已选 \(selected.count) 项" : "\(store.visibleItems.count) 项")
                 .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(isSelecting ? Color.accentColor : Color.secondary)
                 .lineLimit(1)
         }
         .padding(.horizontal, 16)
@@ -237,7 +313,7 @@ struct BrowserView: View {
                     spacing: 12
                 ) {
                     ForEach(store.visibleItems) { item in
-                        cardLink(for: item)
+                        cardView(for: item)
                     }
                 }
                 .padding(.horizontal, 16)
@@ -249,51 +325,64 @@ struct BrowserView: View {
     }
 
     @ViewBuilder
-    private func cardLink(for item: FileItem) -> some View {
-        Group {
-            if item.isDirectory {
-                NavigationLink {
-                    BrowserView(folder: item.url)
+    private func cardView(for item: FileItem) -> some View {
+        if isSelecting {
+            Button {
+                toggle(item)
+            } label: {
+                FileCard(item: item, isSelecting: true, isSelected: selected.contains(item.id))
+            }
+            .buttonStyle(.plain)
+        } else {
+            NavigationLink {
+                destination(for: item)
+            } label: {
+                FileCard(item: item)
+            }
+            .buttonStyle(.plain)
+            .contextMenu {
+                Button {
+                    Task {
+                        try? await Task.sleep(nanoseconds: 320_000_000)
+                        enterSelection(with: item)
+                    }
                 } label: {
-                    FileCard(item: item)
+                    Label("选择", systemImage: "checkmark.circle")
                 }
-            } else if item.kind == .archive {
-                NavigationLink {
-                    ArchiveBrowserView(item: item)
+
+                Button {
+                    // 等长按菜单收起后再弹输入框，否则弹窗会被菜单的消失动画吞掉
+                    Task {
+                        try? await Task.sleep(nanoseconds: 320_000_000)
+                        promptMode = .rename(item)
+                        promptText = item.name
+                        showPrompt = true
+                    }
                 } label: {
-                    FileCard(item: item)
+                    Label("重命名", systemImage: "pencil")
                 }
-            } else {
-                NavigationLink {
-                    FileDetailView(item: item)
+
+                Button(role: .destructive) {
+                    Task {
+                        try? await Task.sleep(nanoseconds: 320_000_000)
+                        pendingDelete = item
+                        showDeleteDialog = true
+                    }
                 } label: {
-                    FileCard(item: item)
+                    Label("删除", systemImage: "trash")
                 }
             }
         }
-        .buttonStyle(.plain)
-        .contextMenu {
-            Button {
-                // 等长按菜单收起后再弹输入框，否则弹窗会被菜单的消失动画吞掉
-                Task {
-                    try? await Task.sleep(nanoseconds: 320_000_000)
-                    promptMode = .rename(item)
-                    promptText = item.name
-                    showPrompt = true
-                }
-            } label: {
-                Label("重命名", systemImage: "pencil")
-            }
+    }
 
-            Button(role: .destructive) {
-                Task {
-                    try? await Task.sleep(nanoseconds: 320_000_000)
-                    pendingDelete = item
-                    showDeleteDialog = true
-                }
-            } label: {
-                Label("删除", systemImage: "trash")
-            }
+    @ViewBuilder
+    private func destination(for item: FileItem) -> some View {
+        if item.isDirectory {
+            BrowserView(folder: item.url)
+        } else if item.kind == .archive {
+            ArchiveBrowserView(item: item)
+        } else {
+            FileDetailView(item: item)
         }
     }
 
@@ -316,7 +405,7 @@ struct BrowserView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    // MARK: - 悬浮导入按钮
+    // MARK: - 底部操作
 
     private var importButton: some View {
         Button {
@@ -335,6 +424,56 @@ struct BrowserView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("导入文件")
+    }
+
+    private var selectionBar: some View {
+        HStack(spacing: 12) {
+            selectionAction(title: "移动", symbol: "folder", enabled: !selected.isEmpty) {
+                showMoveSheet = true
+            }
+            selectionAction(title: "删除", symbol: "trash", enabled: !selected.isEmpty, tint: .red) {
+                showBatchDelete = true
+            }
+        }
+        .padding(.horizontal, 16)
+        .confirmationDialog(
+            "删除 \(selected.count) 项？",
+            isPresented: $showBatchDelete,
+            titleVisibility: .visible
+        ) {
+            Button("删除", role: .destructive) {
+                let items = selectedItems
+                exitSelection()
+                store.delete(items: items)
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("此操作不可撤销")
+        }
+    }
+
+    private func selectionAction(title: String,
+                                 symbol: String,
+                                 enabled: Bool,
+                                 tint: Color = .primary,
+                                 action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: symbol)
+                    .font(.system(size: 15, weight: .semibold))
+                Text(title)
+                    .font(.system(size: 16, weight: .semibold))
+            }
+            .foregroundStyle(enabled ? tint : Color.secondary)
+            .frame(maxWidth: .infinity)
+            .frame(height: 52)
+            .background(Color(.secondarySystemBackground), in: Capsule())
+            .overlay {
+                Capsule().strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5)
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
     }
 
     private var importingOverlay: some View {
@@ -365,6 +504,51 @@ struct BrowserView: View {
             .padding(.horizontal, 32)
             .shadow(color: .black.opacity(0.2), radius: 10, y: 4)
             .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+
+    // MARK: - 多选状态
+
+    private var selectedItems: [FileItem] {
+        store.items.filter { selected.contains($0.id) }
+    }
+
+    private var allSelected: Bool {
+        !store.visibleItems.isEmpty && selected.count >= store.visibleItems.count
+    }
+
+    private func enterSelection(with item: FileItem? = nil) {
+        withAnimation(.easeInOut(duration: 0.18)) {
+            isSelecting = true
+            if let item = item {
+                selected = [item.id]
+            } else {
+                selected = []
+            }
+        }
+    }
+
+    private func exitSelection() {
+        withAnimation(.easeInOut(duration: 0.18)) {
+            isSelecting = false
+            selected.removeAll()
+        }
+    }
+
+    private func toggle(_ item: FileItem) {
+        if selected.contains(item.id) {
+            selected.remove(item.id)
+        } else {
+            selected.insert(item.id)
+        }
+    }
+
+    private func toggleSelectAll() {
+        let visible = Set(store.visibleItems.map { $0.id })
+        if selected.count >= visible.count {
+            selected.removeAll()
+        } else {
+            selected = visible
+        }
     }
 
     // MARK: - 命名弹窗

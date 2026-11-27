@@ -3,6 +3,8 @@ import SwiftUI
 /// 快捷指令风格的网格卡片：彩色渐变底 + 半透明图标块 + 底部两行文字
 struct FileCard: View {
     let item: FileItem
+    var isSelecting: Bool = false
+    var isSelected: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -19,12 +21,12 @@ struct FileCard: View {
                 Spacer(minLength: 4)
 
                 Circle()
-                    .fill(.white.opacity(0.20))
+                    .fill(isSelected ? Color.white : Color.white.opacity(0.20))
                     .frame(width: 28, height: 28)
                     .overlay {
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(.white.opacity(0.92))
+                        Image(systemName: badgeSymbol)
+                            .font(.system(size: isSelecting ? 12 : 11, weight: .bold))
+                            .foregroundStyle(badgeColor)
                     }
             }
 
@@ -62,8 +64,22 @@ struct FileCard: View {
                 )
             }
         }
+        .overlay {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .strokeBorder(Color.white, lineWidth: isSelected ? 2.5 : 0)
+        }
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+
+    private var badgeSymbol: String {
+        guard isSelecting else { return "chevron.right" }
+        return isSelected ? "checkmark" : "circle"
+    }
+
+    private var badgeColor: Color {
+        guard isSelecting else { return .white.opacity(0.92) }
+        return isSelected ? item.kind.gradient.first ?? .black : .white.opacity(0.85)
     }
 
     private var subtitle: String {
